@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>QCM Editable avec images locales et confettis</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f0f2f5;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  #modeToggle {
+    display: block;
+    margin: 0 auto 20px auto;
+    padding: 10px 25px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+  }
+  #questionsContainer {
+    max-width: 900px;
+    margin: auto;
+  }
+  .question-block {
+    background: white;
+    padding: 15px 20px;
+    margin-bottom: 25px;
+    border-radius: 10px;
+    box-shadow: 0 2px 7px rgba(0,0,0,0.1);
+  }
+  .question-block.editing input[type="text"] {
+    width: 100%;
+    font-size: 16px;
+    margin-bottom: 10px;
+    padding: 6px;
+  }
+  .answers-list {
+    list-style: none;
+    padding-left: 0;
+  }
+  .answers-list li {
+    margin-bottom: 8px;
+  }
+  .answers-list li input[type="text"] {
+    width: 70%;
+    padding: 5px;
+  }
+  .answers-list li label {
+    margin-left: 8px;
+  }
+  button.small-btn {
+    margin-left: 10px;
+    font-size: 14px;
+    padding: 4px 10px;
+    border: none;
+    background: #dc3545;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button.small-btn.add-answer {
+    background: #28a745;
+  }
+  button.small-btn.add-image {
+    background: #17a2b8;
+    margin-top: 5px;
+  }
+  #addQuestionBtn {
+    display: block;
+    margin: 20px auto;
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #submitBtn {
+    display: block;
+    margin: 30px auto 20px auto;
+    padding: 12px 30px;
+    font-size: 18px;
+    border-radius: 8px;
+    border: none;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+  }
+  #result {
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: #28a745;
+    margin-top: 20px;
+  }
+  img.uploaded-img {
+    max-width: 100%;
+    max-height: 200px;
+    display: block;
+    margin-top: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+</style>
+</head>
+<body>
+<h1>QCM Editable avec Images</h1>
+<button id="modeToggle">Passer en mode Test</button>
+<div id="saveLoadSection" style="max-width:900px;margin:auto;margin-bottom:20px;text-align:center;">
+<input id="qcmNameInput" placeholder="Nom du QCM" style="padding: 8px; width: 300px; border-radius: 6px; border: 1px solid #ccc; margin-right: 10px;" type="text"/>
+<button onclick="saveNamedQCM()" style="padding: 8px 20px; border: none; border-radius: 6px; background-color: #28a745; color: white; cursor: pointer;">Sauvegarder</button>
+<select id="qcmLoadSelect" style="padding: 8px; border-radius: 6px; margin-left: 10px;"></select>
+<button onclick="loadNamedQCM()" style="padding: 8px 20px; border: none; border-radius: 6px; background-color: #007bff; color: white; cursor: pointer;">Charger</button>
+</div><div id="questionsContainer"></div>
+<button id="addQuestionBtn">Ajouter une question</button>
+<button id="submitBtn" style="display:none;">Valider le QCM</button>
+<div id="result"></div>
+<!-- Confettis -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+<script>
+  let mode = 'edit'; // 'edit' ou 'test'
+  let questions = [];
+
+  // Chargement localStorage si possible
+  if(localStorage.getItem('qcmQuestions')) {
+    questions = JSON.parse(localStorage.getItem('qcmQuestions'));
+  } else {
+    questions = [
+      {
+        questionText: "Qui est le président actuel de la France ?",
+        image: "", // base64 image ici si ajoutée
+        answers: [
+          { text: "Nicolas Sarkozy", correct: false, image: "" },
+          { text: "François Hollande", correct: false, image: "" },
+          { text: "Emmanuel Macron", correct: true, image: "" }
+        ]
+      }
+    ];
+  }
+
+  const questionsContainer = document.getElementById('questionsContainer');
+  const modeToggle = document.getElementById('modeToggle');
+  const addQuestionBtn = document.getElementById('addQuestionBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  const resultDiv = document.getElementById('result');
+
+  function saveQuestions() {
+    localStorage.setItem('qcmQuestions', JSON.stringify(questions));
+  }
+
+  // Affiche la liste en mode édition
+  function renderEditMode() {
+    submitBtn.style.display = 'none';
+    addQuestionBtn.style.display = 'block';
+    resultDiv.textContent = '';
+    questionsContainer.innerHTML = '';
+
+    questions.forEach((q, qIndex) => {
+      const qDiv = document.createElement('div');
+      qDiv.className = 'question-block editing';
+      qDiv.dataset.index = qIndex;
+
+      // Question texte
+      const questionInput = document.createElement('input');
+      questionInput.type = 'text';
+      questionInput.value = q.questionText;
+      questionInput.placeholder = "Tape ta question ici...";
+      questionInput.oninput = (e) => {
+        questions[qIndex].questionText = e.target.value;
+        saveQuestions();
+      };
+      qDiv.appendChild(questionInput);
+
+      // Bouton + input fichier pour image question
+      const qImageInput = document.createElement('input');
+      qImageInput.type = 'file';
+      qImageInput.accept = 'image/*';
+      qImageInput.style.display = 'none';
+
+      const qImageBtn = document.createElement('button');
+      qImageBtn.type = 'button';
+      qImageBtn.textContent = "Ajouter/modifier image question";
+      qImageBtn.className = 'small-btn add-image';
+
+      qImageBtn.onclick = () => qImageInput.click();
+
+      qImageInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            questions[qIndex].image = event.target.result;
+            saveQuestions();
+            renderEditMode();
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      qDiv.appendChild(qImageBtn);
+      qDiv.appendChild(qImageInput);
+
+      // Affiche image question si existe
+      if(q.image) {
+        const img = document.createElement('img');
+        img.src = q.image;
+        img.className = 'uploaded-img';
+        qDiv.appendChild(img);
+      }
+
+      // Liste réponses
+      const ul = document.createElement('ul');
+      ul.className = 'answers-list';
+
+      q.answers.forEach((ans, aIndex) => {
+        const li = document.createElement('li');
+
+        const answerInput = document.createElement('input');
+        answerInput.type = 'text';
+        answerInput.value = ans.text;
+        answerInput.placeholder = "Réponse...";
+        answerInput.oninput = (e) => {
+          questions[qIndex].answers[aIndex].text = e.target.value;
+          saveQuestions();
+        };
+
+        const correctCheckbox = document.createElement('input');
+        correctCheckbox.type = 'checkbox';
+        correctCheckbox.checked = ans.correct;
+        correctCheckbox.onchange = (e) => {
+          // une seule bonne réponse par question
+          questions[qIndex].answers.forEach((a,i) => a.correct = false);
+          questions[qIndex].answers[aIndex].correct = e.target.checked;
+          saveQuestions();
+          renderEditMode();
+        };
+
+        const label = document.createElement('label');
+        label.textContent = "Bonne réponse";
+        label.prepend(correctCheckbox);
+
+        // Bouton supprimer réponse
+        const deleteAnsBtn = document.createElement('button');
+        deleteAnsBtn.textContent = "X";
+        deleteAnsBtn.className = 'small-btn';
+        deleteAnsBtn.onclick = () => {
+          questions[qIndex].answers.splice(aIndex, 1);
+          saveQuestions();
+          renderEditMode();
+        };
+
+        // Bouton + input fichier pour image réponse
+        const ansImageInput = document.createElement('input');
+        ansImageInput.type = 'file';
+        ansImageInput.accept = 'image/*';
+        ansImageInput.style.display = 'none';
+
+        const ansImageBtn = document.createElement('button');
+        ansImageBtn.type = 'button';
+        ansImageBtn.textContent = "Ajouter/modifier image réponse";
+        ansImageBtn.className = 'small-btn add-image';
+
+        ansImageBtn.onclick = () => ansImageInput.click();
+
+        ansImageInput.onchange = (e) => {
+          const file = e.target.files[0];
+          if(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+              questions[qIndex].answers[aIndex].image = event.target.result;
+              saveQuestions();
+              renderEditMode();
+            };
+            reader.readAsDataURL(file);
+          }
+        };
+
+        li.appendChild(answerInput);
+        li.appendChild(label);
+        li.appendChild(deleteAnsBtn);
+        li.appendChild(ansImageBtn);
+        li.appendChild(ansImageInput);
+
+        // Affiche image réponse si existe
+        if(ans.image) {
+          const img = document.createElement('img');
+          img.src = ans.image;
+          img.className = 'uploaded-img';
+          li.appendChild(img);
+        }
+
+        ul.appendChild(li);
+      });
+
+      qDiv.appendChild(ul);
+
+      // Bouton ajouter réponse
+      const addAnswerBtn = document.createElement('button');
+      addAnswerBtn.textContent = "Ajouter une réponse";
+      addAnswerBtn.className = 'small-btn add-answer';
+      addAnswerBtn.onclick = () => {
+        questions[qIndex].answers.push({text:"", correct:false, image:""});
+        saveQuestions();
+        renderEditMode();
+      };
+      qDiv.appendChild(addAnswerBtn);
+
+      // Bouton supprimer question
+      const deleteQBtn = document.createElement('button');
+      deleteQBtn.textContent = "Supprimer la question";
+      deleteQBtn.className = 'small-btn';
+      deleteQBtn.style.background = '#dc3545';
+      deleteQBtn.onclick = () => {
+        questions.splice(qIndex,1);
+        saveQuestions();
+        renderEditMode();
+      };
+      qDiv.appendChild(deleteQBtn);
+
+      questionsContainer.appendChild(qDiv);
+    });
+  }
+
+  // Affiche la liste en mode test (joueur répond)
+  function renderTestMode() {
+    submitBtn.style.display = 'block';
+    addQuestionBtn.style.display = 'none';
+    resultDiv.textContent = '';
+    questionsContainer.innerHTML = '';
+
+    questions.forEach((q, qIndex) => {
+      const qDiv = document.createElement('div');
+      qDiv.className = 'question-block';
+      qDiv.dataset.index = qIndex;
+
+      const questionText = document.createElement('div');
+      questionText.textContent = q.questionText;
+      questionText.style.fontWeight = 'bold';
+      qDiv.appendChild(questionText);
+
+      // Image question
+      if(q.image) {
+        const img = document.createElement('img');
+        img.src = q.image;
+        img.className = 'uploaded-img';
+        qDiv.appendChild(img);
+      }
+
+      // Réponses radio (une seule bonne réponse)
+      q.answers.forEach((ans, aIndex) => {
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.marginTop = '8px';
+
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `q${qIndex}`;
+        input.value = aIndex;
+
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(" " + ans.text));
+
+        // Image réponse
+        if(ans.image) {
+          const img = document.createElement('img');
+          img.src = ans.image;
+          img.className = 'uploaded-img';
+          label.appendChild(img);
+        }
+
+        qDiv.appendChild(label);
+      });
+
+      questionsContainer.appendChild(qDiv);
+    });
+  }
+
+  modeToggle.onclick = () => {
+    if(mode === 'edit') {
+      if(questions.length === 0) {
+        alert("Ajoute au moins une question avant de passer en mode test.");
+        return;
+      }
+      mode = 'test';
+      modeToggle.textContent = "Passer en mode édition";
+      renderTestMode();
+    } else {
+      mode = 'edit';
+      modeToggle.textContent = "Passer en mode Test";
+      renderEditMode();
+    }
+    resultDiv.textContent = '';
+  };
+
+  addQuestionBtn.onclick = () => {
+    questions.push({
+      questionText: "",
+      image: "",
+      answers: [
+        {text:"", correct:false, image:""},
+        {text:"", correct:false, image:""}
+      ]
+    });
+    saveQuestions();
+    renderEditMode();
+  };
+
+  submitBtn.onclick = () => {
+    let allCorrect = true;
+    let unanswered = false;
+
+    questions.forEach((q, qIndex) => {
+      const selected = document.querySelector(`input[name="q${qIndex}"]:checked`);
+      if(!selected) {
+        unanswered = true;
+        allCorrect = false;
+        return;
+      }
+      const chosenIndex = parseInt(selected.value, 10);
+      if(!q.answers[chosenIndex].correct) {
+        allCorrect = false;
+      }
+    });
+
+    if(unanswered) {
+      alert("Tu dois répondre à toutes les questions avant de valider.");
+      return;
+    }
+
+    if(allCorrect) {
+      resultDiv.textContent = "🎉 Bravo, toutes les réponses sont justes ! 🎉";
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    } else {
+      resultDiv.textContent = "Certaines réponses sont incorrectes, réessaie.";
+    }
+  };
+
+  renderEditMode();
+
+function saveNamedQCM() {
+  const name = document.getElementById("qcmNameInput").value.trim();
+  if (!name) {
+    alert("Choisis un nom pour sauvegarder ce QCM.");
+    return;
+  }
+  localStorage.setItem("qcm_" + name, JSON.stringify(questions));
+  updateQCMSelect();
+  alert("QCM '" + name + "' sauvegardé !");
+}
+
+function loadNamedQCM() {
+  const select = document.getElementById("qcmLoadSelect");
+  const name = select.value;
+  if (!name) {
+    alert("Choisis un QCM à charger.");
+    return;
+  }
+  const saved = localStorage.getItem("qcm_" + name);
+  if (saved) {
+    questions = JSON.parse(saved);
+    saveQuestions();
+    renderEditMode();
+  }
+}
+
+function updateQCMSelect() {
+  const select = document.getElementById("qcmLoadSelect");
+  select.innerHTML = "";
+  for (let key in localStorage) {
+    if (key.startsWith("qcm_")) {
+      const option = document.createElement("option");
+      option.value = key.substring(4);
+      option.textContent = key.substring(4);
+      select.appendChild(option);
+    }
+  }
+}
+window.addEventListener("load", updateQCMSelect);
+</script>
+</body>
+</html>
